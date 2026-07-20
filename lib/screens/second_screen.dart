@@ -1,32 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
-import '../data/models/user_model.dart';
+import '../providers/user_provider.dart';
 import 'third_screen.dart';
 
-class SecondScreen extends StatefulWidget {
+class SecondScreen extends StatelessWidget {
   final String userName;
 
   const SecondScreen({super.key, required this.userName});
 
-  @override
-  State<SecondScreen> createState() => _SecondScreenState();
-}
-
-class _SecondScreenState extends State<SecondScreen> {
-  User? _selectedUser;
-
-  Future<void> _onChooseUser() async {
-    final User? result = await Navigator.push<User>(
+  void _onChooseUser(BuildContext context) {
+    Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ThirdScreen()),
     );
-    if (result != null) {
-      setState(() => _selectedUser = result);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final selectedUser = context.watch<UserProvider>().selectedUser;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -56,7 +49,7 @@ class _SecondScreenState extends State<SecondScreen> {
             ),
             const SizedBox(height: 2),
             Text(
-              widget.userName,
+              userName,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -66,7 +59,7 @@ class _SecondScreenState extends State<SecondScreen> {
 
             Expanded(
               child: Center(
-                child: _selectedUser == null
+                child: selectedUser == null
                     ? const Text(
                         'Selected User Name',
                         style: TextStyle(
@@ -76,7 +69,7 @@ class _SecondScreenState extends State<SecondScreen> {
                         ),
                       )
                     : Text(
-                        _selectedUser!.fullName,
+                        selectedUser.fullName,
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
@@ -90,7 +83,7 @@ class _SecondScreenState extends State<SecondScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 32),
               child: ElevatedButton(
-                onPressed: _onChooseUser,
+                onPressed: () => _onChooseUser(context),
                 child: const Text('Choose a User'),
               ),
             ),

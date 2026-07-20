@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../data/models/user_model.dart';
-import '../data/services/user_service.dart';
+import '../providers/user_provider.dart';
 
 class ThirdScreen extends StatefulWidget {
   const ThirdScreen({super.key});
@@ -13,20 +14,17 @@ class ThirdScreen extends StatefulWidget {
 }
 
 class _ThirdScreenState extends State<ThirdScreen> {
-  final UserService _userService = UserService();
   final ScrollController _scrollController = ScrollController();
-
-  final List<User> _users = [];
-  int _currentPage = 1;
-  bool _isLoading = false;
-  bool _isFirstLoad = true;
-  bool _hasMore = true;
-  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _fetchUsers();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = context.read<UserProvider>();
+      if (provider.isFirstLoad && provider.users.isEmpty) {
+        provider.fetchUsers();
+      }
+    });
     _scrollController.addListener(_onScroll);
   }
 
@@ -40,50 +38,20 @@ class _ThirdScreenState extends State<ThirdScreen> {
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      if (!_isLoading && _hasMore) {
-        _fetchUsers();
+      final provider = context.read<UserProvider>();
+      if (!provider.isLoading && provider.hasMore) {
+        provider.fetchUsers();
       }
     }
   }
 
-  Future<void> _fetchUsers() async {
-    if (_isLoading) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final response = await _userService.getUsers(page: _currentPage);
-      setState(() {
-        _users.addAll(response.data);
-        _hasMore = response.hasMore;
-        _currentPage++;
-        _isLoading = false;
-        _isFirstLoad = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _isFirstLoad = false;
-        _errorMessage = 'Failed to load users. Please try again.';
-      });
-    }
-  }
-
   Future<void> _onRefresh() async {
-    setState(() {
-      _users.clear();
-      _currentPage = 1;
-      _hasMore = true;
-      _isFirstLoad = true;
-      _errorMessage = null;
-    });
-    await _fetchUsers();
+    await context.read<UserProvider>().refreshUsers();
   }
 
   void _onUserTap(User user) {
-    Navigator.pop(context, user);
+    context.read<UserProvider>().selectUser(user);
+    Navigator.pop(context);
   }
 
   @override
@@ -101,59 +69,56 @@ class _ThirdScreenState extends State<ThirdScreen> {
           child: Divider(height: 1, color: AppTheme.dividerColor),
         ),
       ),
-      body: _buildBody(),
-    );
-  }
-
-  Widget _buildBody() {
-    // First load shimmer
-    if (_isFirstLoad) {
-      return _buildShimmer();
-    }
-
-    // Error state
-    if (_errorMessage != null && _users.isEmpty) {
-      return _buildErrorState();
-    }
-
-    // Empty state
-    if (!_isLoading && _users.isEmpty) {
-      return _buildEmptyState();
-    }
-
-    return RefreshIndicator(
-      onRefresh: _onRefresh,
-      color: AppTheme.primaryTeal,
-      child: ListView.separated(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: _users.length + (_hasMore ? 1 : 0),
-        separatorBuilder: (context, index) => const Divider(
-          height: 1,
-          color: AppTheme.dividerColor,
-          indent: 80,
-          endIndent: 16,
-        ),
-        itemBuilder: (context, index) {
-          if (index >= _users.length) {
-            // Bottom loading indicator
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: AppTheme.primaryTeal,
-                  ),
-                ),
-              ),
-            );
+      body: Consumer<UserProvider>(
+        builder: (context, provider, child) {
+          if (provider.isFirstLoad && provider.isLoading) {
+            return _buildShimmer();
           }
-          return _UserListItem(
-            user: _users[index],
-            onTap: () => _onUserTap(_users[index]),
+
+          if (provider.errorMessage != null && provider.users.isEmpty) {
+            return _buildErrorState(provider);
+          }
+
+          if (!provider.isLoading && provider.users.isEmpty) {
+            return _buildEmptyState();
+          }
+
+          return RefreshIndicator(
+            onRefresh: _onRefresh,
+            color: AppTheme.primaryTeal,
+            child: ListView.separated(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: provider.users.length + (provider.hasMore ? 1 : 0),
+              separatorBuilder: (ctx, idx) => const Divider(
+                height: 1,
+                color: AppTheme.dividerColor,
+                indent: 80,
+                endIndent: 16,
+              ),
+              itemBuilder: (context, index) {
+                if (index >= provider.users.length) {
+                  // loading indicator
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: AppTheme.primaryTeal,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return _UserListItem(
+                  user: provider.users[index],
+                  onTap: () => _onUserTap(provider.users[index]),
+                );
+              },
+            ),
           );
         },
       ),
@@ -236,7 +201,7 @@ class _ThirdScreenState extends State<ThirdScreen> {
     );
   }
 
-  Widget _buildErrorState() {
+  Widget _buildErrorState(UserProvider provider) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -246,7 +211,7 @@ class _ThirdScreenState extends State<ThirdScreen> {
             Icon(Icons.wifi_off_rounded, size: 72, color: Colors.grey[300]),
             const SizedBox(height: 16),
             Text(
-              _errorMessage ?? 'Something went wrong',
+              provider.errorMessage ?? 'Something went wrong',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
@@ -257,7 +222,7 @@ class _ThirdScreenState extends State<ThirdScreen> {
             SizedBox(
               width: 160,
               child: ElevatedButton(
-                onPressed: _onRefresh,
+                onPressed: provider.refreshUsers,
                 child: const Text('Try Again'),
               ),
             ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../providers/user_provider.dart';
 import 'second_screen.dart';
 
 class FirstScreen extends StatefulWidget {
@@ -43,6 +45,9 @@ class _FirstScreenState extends State<FirstScreen> {
       _showDialog('Please enter your name first.');
       return;
     }
+
+    context.read<UserProvider>().clearSelectedUser();
+
     Navigator.push(
       context,
       MaterialPageRoute(
